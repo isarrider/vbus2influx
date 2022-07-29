@@ -1,7 +1,6 @@
 # vbus2influx
 
-Plan was to be able to be able to have a Grafana panel,<br>
-where I can see the 8 different temperature sensors + 1 Pump speed (in %).<br>
+Plan was to be able to have a Grafana panel, where I can see the 8 different temperature sensors + 1 Pump speed (in %).<br>
 
 As I have a Resol DeltaSol BX Plus, there is a bus called VBus putting out this data without the need to poll.<br>
 
@@ -33,7 +32,7 @@ I included a dockerfile so it is (more) easy to deploy.
 Proof that the Pi3 is overkill...
 ![Clipboard01](https://user-images.githubusercontent.com/6953309/181697857-e6a26a3e-ba0e-4dd4-9741-4b94376aa0f4.png)
 
-A big thanks to Daniel wippermann for some really valueable hints and providing the library
-and to my coworker who wants to stay annonymous as he thinks his code is not "clean" enough ;)<br>
+A big thanks to Daniel wippermann for some really valueable hints and<br>
+providing the library and to my coworker who wants to stay annonymous as he thinks his code is not "clean" enough ;)<br>
 
-Ill update this when I have some Grafana screenshots
+I'll update this when I have some Grafana screenshots
