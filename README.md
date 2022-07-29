@@ -27,6 +27,10 @@ Instead of the ESP32 I attached it to a Pi3 (actually overkill)...
 I have not written the code myself, only stated what I need and a young engineer from work hacked it together for me<br>
 and gave his blessing to put it up here under a permissive licence.<br>
 
+What it does is it uses the library from Daniel Wippermann to dissect the data stream and<br>
+a) displays this as raw content in a webserver<br>
+b) pushes the data to InfluxDB
+
 I included a dockerfile so it is (more) easy to deploy.
 
 Proof that the Pi3 is overkill...
