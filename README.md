@@ -31,9 +31,25 @@ What it does is it uses the library from Daniel Wippermann to dissect the data s
 a) displays this as raw content in a webserver<br>
 b) pushes the data to InfluxDB
 
-I included a dockerfile so it is (more) easy to deploy.
+# Docker
+
+I included a dockerfile so it is (more) easy to deploy.<br>
+I run it like:
+
+docker run -d --restart unless-stopped \
+ -p 11110:11110 \
+ -v vbus2influx:/etc \
+ --device /dev/ttyAMA0:/dev/ttyAMA0 \
+ --name vbus2influx \
+ -h vbus2influx \
+ vbus2influx
+
+(the vbus2influx.toml is to be placed in /etc)
+
+# misc
 
 Proof that the Pi3 is overkill...
+
 ![Clipboard01](https://user-images.githubusercontent.com/6953309/181697857-e6a26a3e-ba0e-4dd4-9741-4b94376aa0f4.png)
 
 A big thanks to Daniel wippermann for some really valueable hints and<br>
