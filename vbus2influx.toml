@@ -1,0 +1,7 @@
+db_url = "InfluxDB_url_and_port"
+db_token = "secret_token_from_InfluxDB"
+db_org = "org_name"
+db_bucket = "bucket_name"
+db_measurement = "vbus2influx"
+uart_path = "/dev/ttyAMA0"
+webserver_address = "0.0.0.0:port"
