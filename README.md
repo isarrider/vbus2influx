@@ -55,4 +55,6 @@ Proof that the Pi3 is overkill...
 A big thanks to Daniel Wippermann for some really valueable hints and providing the library<br>
 and to my coworker who wants to stay annonymous as he thinks his code is not "clean" enough ;)<br>
 
-I'll update this when I have some Grafana screenshots
+# Final Result
+
+![image](https://user-images.githubusercontent.com/6953309/182209261-9085c7d8-ca47-4b35-ab78-62c18acd50f5.png)
