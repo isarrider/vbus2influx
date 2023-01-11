@@ -24,8 +24,7 @@ Instead of the ESP32 I attached it to a Pi3 (actually overkill)...
 
 # Software
 
-I have not written the code myself, only stated what I need and a young engineer from work hacked it together for me<br>
-and gave his blessing to put it up here under a permissive licence.<br>
+I have not written the code myself, only stated what I need and a young engineer from work hacked it together for me and gave his blessing to put it up here under a permissive licence.<br>
 
 What it does is it uses the library from Daniel Wippermann to dissect the data stream and<br>
 a) displays this as raw content in a webserver<br>
