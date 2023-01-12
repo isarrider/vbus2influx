@@ -1,39 +1,47 @@
-# syntax=docker/dockerfile:1.0-experimental
+################
+##### Builder
+FROM rust:slim as builder
 
-############################
-# STEP 1 build executable binary
-############################
-FROM rust:latest as build
+WORKDIR /usr/src
 
-# create a new empty shell project
-RUN USER=root cargo new --bin vbus2influx
-WORKDIR /vbus2influx
+# Create blank project
+RUN USER=root cargo new medium-rust-dockerize
 
-# copy over your manifests
-COPY ./Cargo.lock ./Cargo.lock
-COPY ./Cargo.toml ./Cargo.toml
+# Set the working directory
+WORKDIR /usr/src/medium-rust-dockerize
 
-# this build step will cache your dependencies
-RUN cargo build --release
-RUN rm src/*.rs
+# We want dependencies cached, so copy those first.
+COPY Cargo.toml Cargo.lock /usr/src/medium-rust-dockerize/
 
-# copy your source tree
-COPY ./src ./src
+## Install target platform (Cross-Compilation) --> Needed for Alpine
+RUN apt update && apt upgrade -y
+RUN apt install -y g++-aarch64-linux-gnu libc6-dev-arm64-cross
 
-# build for release
-RUN rm ./target/release/deps/vbus2influx*
-RUN cargo build --release
+RUN rustup target add aarch64-unknown-linux-musl
+RUN rustup toolchain install stable-aarch64-unknown-linux-musl --force-non-host
 
-#############################
-## STEP 2 build a small image
-#############################
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc \
+    CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc \
+    CXX_aarch64_unknown_linux_musl=aarch64-linux-gnu-g++
 
-FROM debian:bullseye-slim
+# This is a dummy build to get the dependencies cached.
+RUN cargo build --target aarch64-unknown-linux-musl --release
 
-# Copy our static executable
-COPY --from=build /vbus2influx/target/release/vbus2influx /usr/local/bin/vbus2influx
+# Now copy in the rest of the sources
+COPY src /usr/src/medium-rust-dockerize/src/
 
-RUN useradd -M -G dialout vbus2influx
-USER vbus2influx
+## Touch main.rs to prevent cached release build
+RUN touch /usr/src/medium-rust-dockerize/src/main.rs
 
+# This is the actual application build.
+RUN cargo build --target aarch64-unknown-linux-musl --release
+
+################
+##### Runtime
+FROM alpine:latest as runtime 
+
+# Copy application binary from builder image
+COPY --from=builder /usr/src/medium-rust-dockerize/target/aarch64-unknown-linux-musl/release/vbus2influx /usr/local/bin/
+
+# Run the application
 CMD ["vbus2influx"]
