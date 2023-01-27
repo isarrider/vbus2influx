@@ -44,8 +44,8 @@ FROM alpine:latest as runtime
 COPY --from=builder /usr/src/medium-rust-dockerize/target/aarch64-unknown-linux-musl/release/vbus2influx /usr/local/bin/
 
 # Run as nonroot
-RUN adduser -S vbus2influx
-USER vbus2influx
+RUN adduser -S vbus2inf -G dialout
+USER vbus2inf
 
 # Run the application
 CMD ["vbus2influx"]
