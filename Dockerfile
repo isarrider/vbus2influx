@@ -25,6 +25,7 @@ ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc \
     CXX_aarch64_unknown_linux_musl=aarch64-linux-gnu-g++
 
 # This is a dummy build to get the dependencies cached.
+RUN cargo update
 RUN cargo build --target aarch64-unknown-linux-musl --release
 
 # Now copy in the rest of the sources
