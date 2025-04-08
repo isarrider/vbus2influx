@@ -39,7 +39,7 @@ RUN cargo build --target aarch64-unknown-linux-musl --release
 
 ################
 ##### Runtime
-FROM alpine:latest as runtime 
+FROM alpine:latest AS runtime 
 
 # Copy application binary from builder image
 COPY --from=builder /usr/src/medium-rust-dockerize/target/aarch64-unknown-linux-musl/release/vbus2influx /usr/local/bin/
