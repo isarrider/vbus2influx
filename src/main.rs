@@ -264,6 +264,16 @@ fn read_data<R: Read>(
             .ok_or_else(|| eyre!("Field `relay_05` not set."))?
             .raw_value_f64()
             .ok_or_else(|| eyre!("Field `relay_05` can't be converted to `f64`."))?,
+        PWM_0_10V_A: fields
+            .next()
+            .ok_or_else(|| eyre!("Field `PWM_0_10V_A` not set."))?
+            .raw_value_f64()
+            .ok_or_else(|| eyre!("Field `PWM_0_10V_A` can't be converted to `f64`."))?,
+        PWM_0_10V_B: fields
+            .next()
+            .ok_or_else(|| eyre!("Field `PWM_0_10V_B` not set."))?
+            .raw_value_f64()
+            .ok_or_else(|| eyre!("Field `PWM_0_10V_B` can't be converted to `f64`."))?,
     };
 
     Ok(measurements)
@@ -294,6 +304,8 @@ struct Measurements {
     relay_03: f64,
     relay_04: f64,
     relay_05: f64,
+    PWM_0_10V_A: f64,
+    PWM_0_10V_B: f64,
 }
 
 impl Measurements {
@@ -322,6 +334,8 @@ impl Measurements {
             relay_03: 0.0,
             relay_04: 0.0,
             relay_05: 0.0,
+            PWM_0_10V_A: 0.0,
+            PWM_0_10V_B: 0.0,
         }
     }
 }
