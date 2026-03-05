@@ -13,7 +13,8 @@ use figment::{
     providers::{Format, Toml},
     Figment,
 };
-use influxdb::{Client, InfluxDbWriteable};
+use futures::stream;
+use influxdb2::{models::DataPoint, Client};
 use resol_vbus::{
     chrono::{DateTime, Utc},
     Data, DataSet, Language, LiveDataReader, Specification, SpecificationFile,
@@ -36,10 +37,6 @@ struct Config {
     webserver_address: Option<SocketAddr>,
 }
 
-// Backoff settings for InfluxDB retries
-const RETRY_DELAY_INITIAL: Duration = Duration::from_secs(2);
-const RETRY_DELAY_MAX: Duration = Duration::from_secs(60);
-
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -50,13 +47,9 @@ async fn main() -> Result<()> {
         .extract()?;
     let config = Arc::new(config);
 
-    // Create InfluxDB Client
-    let client = Client::new(
-        &config.db_url,
-        &config.db_org,
-        &config.db_bucket,
-        &config.db_token,
-    );
+    // Create InfluxDB Client — bucket is no longer part of the client,
+    // it is passed per write call instead.
+    let client = Client::new(&config.db_url, &config.db_org, &config.db_token);
 
     let measurements = Arc::new(Mutex::new(Measurements::zeroed()));
 
@@ -80,46 +73,57 @@ async fn main() -> Result<()> {
     let mut data_reader = LiveDataReader::new(0, UartWrapper(uart));
 
     let mut measurement_buffer: VecDeque<Measurements> = VecDeque::new();
-
-    // Tracks how long to wait before the next InfluxDB retry.
-    // Doubles on each consecutive failure, resets to initial on success.
-    let mut retry_delay = RETRY_DELAY_INITIAL;
-
     loop {
         let current_measurements = read_data(&mut data_reader, &spec)?;
-    // If desired to print when new measurement occures: println!("Received Measurements: {:?}", measurements);
+//        println!("Received Measurements: {:?}", measurements);
         *measurements.lock().await = current_measurements.clone();
         measurement_buffer.push_back(current_measurements);
 
         while let Some(m) = measurement_buffer.pop_front() {
-            // Write measurements to InfluxDB
-            let res = client
-                .query(&m.clone().into_query(&config.db_measurement))
-                .await;
+            // Build a DataPoint from the measurement struct
+            let point = DataPoint::builder(&config.db_measurement)
+                .timestamp(m.time.timestamp_nanos())
+                .field("temperature_01", m.temperature_01)
+                .field("temperature_02", m.temperature_02)
+                .field("temperature_03", m.temperature_03)
+                .field("temperature_04", m.temperature_04)
+                .field("temperature_05", m.temperature_05)
+                .field("temperature_06", m.temperature_06)
+                .field("temperature_07", m.temperature_07)
+                .field("temperature_08", m.temperature_08)
+                .field("temperature_09", m.temperature_09)
+                .field("irradiation_10", m.irradiation_10)
+                .field("temperature_11", m.temperature_11)
+                .field("temperature_12", m.temperature_12)
+                .field("flow_rate_09", m.flow_rate_09)
+                .field("flow_rate_11", m.flow_rate_11)
+                .field("flow_rate_12", m.flow_rate_12)
+                .field("pressure_11", m.pressure_11)
+                .field("pressure_12", m.pressure_12)
+                .field("relay_01", m.relay_01)
+                .field("relay_02", m.relay_02)
+                .field("relay_03", m.relay_03)
+                .field("relay_04", m.relay_04)
+                .field("relay_05", m.relay_05)
+                .field("PWM_0_10V_A", m.PWM_0_10V_A)
+                .field("PWM_0_10V_B", m.PWM_0_10V_B)
+                .build();
 
-            match res {
-                Ok(_) => {
-                    // Successful write: reset backoff so the next failure
-                    // starts from the shortest delay again.
-                    retry_delay = RETRY_DELAY_INITIAL;
+            match point {
+                Ok(point) => {
+                    // Write measurements to InfluxDB
+                    let res = client
+                        .write(&config.db_bucket, stream::iter(vec![point]))
+                        .await;
+
+                    if let Err(err) = res {
+                        eprintln!("Error while sending data to InfluxDB: {err}");
+                        measurement_buffer.push_front(m);
+                        break;
+                    }
                 }
                 Err(err) => {
-                    eprintln!(
-                        "Error while sending data to InfluxDB: {err}. \
-                         Retrying in {}s.",
-                        retry_delay.as_secs()
-                    );
-
-                    // Put the measurement back so it is retried next iteration.
-                    measurement_buffer.push_front(m);
-
-                    // Wait before retrying, so we don't spin-loop and peg the CPU.
-                    tokio::time::sleep(retry_delay).await;
-
-                    // Exponential backoff, capped at RETRY_DELAY_MAX.
-                    retry_delay = (retry_delay * 2).min(RETRY_DELAY_MAX);
-
-                    break;
+                    eprintln!("Error while building DataPoint: {err}");
                 }
             }
         }
@@ -308,7 +312,8 @@ fn read_data<R: Read>(
     Ok(measurements)
 }
 
-#[derive(Debug, Clone, InfluxDbWriteable, Serialize)]
+// InfluxDbWriteable derive removed — fields are written via DataPoint::builder above
+#[derive(Debug, Clone, Serialize)]
 struct Measurements {
     time: DateTime<Utc>,
     temperature_01: f64,
