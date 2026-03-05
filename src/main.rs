@@ -36,6 +36,10 @@ struct Config {
     webserver_address: Option<SocketAddr>,
 }
 
+// Backoff settings for InfluxDB retries
+const RETRY_DELAY_INITIAL: Duration = Duration::from_secs(2);
+const RETRY_DELAY_MAX: Duration = Duration::from_secs(60);
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -76,9 +80,14 @@ async fn main() -> Result<()> {
     let mut data_reader = LiveDataReader::new(0, UartWrapper(uart));
 
     let mut measurement_buffer: VecDeque<Measurements> = VecDeque::new();
+
+    // Tracks how long to wait before the next InfluxDB retry.
+    // Doubles on each consecutive failure, resets to initial on success.
+    let mut retry_delay = RETRY_DELAY_INITIAL;
+
     loop {
         let current_measurements = read_data(&mut data_reader, &spec)?;
-//        println!("Received Measurements: {:?}", measurements);
+    // If desired to print when new measurement occures: println!("Received Measurements: {:?}", measurements);
         *measurements.lock().await = current_measurements.clone();
         measurement_buffer.push_back(current_measurements);
 
@@ -88,10 +97,30 @@ async fn main() -> Result<()> {
                 .query(&m.clone().into_query(&config.db_measurement))
                 .await;
 
-            if let Err(err) = res {
-                eprintln!("Error while sending data to InfluxDB: {err}");
-                measurement_buffer.push_front(m);
-                break;
+            match res {
+                Ok(_) => {
+                    // Successful write: reset backoff so the next failure
+                    // starts from the shortest delay again.
+                    retry_delay = RETRY_DELAY_INITIAL;
+                }
+                Err(err) => {
+                    eprintln!(
+                        "Error while sending data to InfluxDB: {err}. \
+                         Retrying in {}s.",
+                        retry_delay.as_secs()
+                    );
+
+                    // Put the measurement back so it is retried next iteration.
+                    measurement_buffer.push_front(m);
+
+                    // Wait before retrying, so we don't spin-loop and peg the CPU.
+                    tokio::time::sleep(retry_delay).await;
+
+                    // Exponential backoff, capped at RETRY_DELAY_MAX.
+                    retry_delay = (retry_delay * 2).min(RETRY_DELAY_MAX);
+
+                    break;
+                }
             }
         }
     }
