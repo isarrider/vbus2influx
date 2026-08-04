@@ -13,7 +13,8 @@ use figment::{
     providers::{Format, Toml},
     Figment,
 };
-use influxdb::{Client, InfluxDbWriteable};
+use futures::stream;
+use influxdb2::{models::DataPoint, Client};
 use resol_vbus::{
     chrono::{DateTime, Utc},
     Data, DataSet, Language, LiveDataReader, Specification, SpecificationFile,
@@ -48,10 +49,9 @@ async fn main() -> Result<()> {
 
     // Create InfluxDB Client
     let client = Client::new(
-        &config.db_url,
-        &config.db_org,
-        &config.db_bucket,
-        &config.db_token,
+        config.db_url.as_str(),
+        config.db_org.as_str(),
+        config.db_token.as_str(),
     );
 
     let measurements = Arc::new(Mutex::new(Measurements::zeroed()));
@@ -84,9 +84,14 @@ async fn main() -> Result<()> {
 
         while let Some(m) = measurement_buffer.pop_front() {
             // Write measurements to InfluxDB
-            let res = client
-                .query(&m.clone().into_query(&config.db_measurement))
-                .await;
+            let res: Result<()> = async {
+                let point = m.to_data_point(&config.db_measurement)?;
+                client
+                    .write(&config.db_bucket, stream::iter(vec![point]))
+                    .await?;
+                Ok(())
+            }
+            .await;
 
             if let Err(err) = res {
                 eprintln!("Error while sending data to InfluxDB: {err}");
@@ -278,7 +283,7 @@ fn read_data<R: Read>(
     Ok(measurements)
 }
 
-#[derive(Debug, Clone, InfluxDbWriteable, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Measurements {
     time: DateTime<Utc>,
     temperature_01: f64,
@@ -336,5 +341,37 @@ impl Measurements {
             PWM_0_10V_A: 0.0,
             PWM_0_10V_B: 0.0,
         }
+    }
+
+    /// Builds an InfluxDB 2.x `DataPoint` from this set of measurements,
+    /// using the configured, runtime measurement name.
+    fn to_data_point(&self, measurement: &str) -> Result<DataPoint> {
+        Ok(DataPoint::builder(measurement)
+            .timestamp(self.time.timestamp_nanos_opt().unwrap_or_default())
+            .field("temperature_01", self.temperature_01)
+            .field("temperature_02", self.temperature_02)
+            .field("temperature_03", self.temperature_03)
+            .field("temperature_04", self.temperature_04)
+            .field("temperature_05", self.temperature_05)
+            .field("temperature_06", self.temperature_06)
+            .field("temperature_07", self.temperature_07)
+            .field("temperature_08", self.temperature_08)
+            .field("temperature_09", self.temperature_09)
+            .field("irradiation_10", self.irradiation_10)
+            .field("temperature_11", self.temperature_11)
+            .field("temperature_12", self.temperature_12)
+            .field("flow_rate_09", self.flow_rate_09)
+            .field("flow_rate_11", self.flow_rate_11)
+            .field("flow_rate_12", self.flow_rate_12)
+            .field("pressure_11", self.pressure_11)
+            .field("pressure_12", self.pressure_12)
+            .field("relay_01", self.relay_01)
+            .field("relay_02", self.relay_02)
+            .field("relay_03", self.relay_03)
+            .field("relay_04", self.relay_04)
+            .field("relay_05", self.relay_05)
+            .field("PWM_0_10V_A", self.PWM_0_10V_A)
+            .field("PWM_0_10V_B", self.PWM_0_10V_B)
+            .build()?)
     }
 }
