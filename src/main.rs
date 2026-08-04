@@ -125,9 +125,8 @@ async fn run_webserver(config: Arc<Config>, measurements: Arc<Mutex<Measurements
             Json(measurements)
         }),
     );
-    axum::Server::bind(config.webserver_address.as_ref().unwrap())
-        .serve(app.into_make_service())
-        .await?;
+    let listener = tokio::net::TcpListener::bind(config.webserver_address.unwrap()).await?;
+    axum::serve(listener, app).await?;
     Ok(())
 }
 
