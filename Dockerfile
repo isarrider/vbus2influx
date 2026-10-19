@@ -1,52 +1,55 @@
+# syntax=docker/dockerfile:1
+
 ################
 ##### Builder
-FROM rust:slim AS builder
+# Runs on the build machine's own architecture and cross-compiles for the
+# target platform with cargo-zigbuild, so no emulation is needed for the build.
+FROM --platform=$BUILDPLATFORM rust:slim AS builder
 
-WORKDIR /usr/src
+# Zig acts as the cross C compiler and linker (needed for ring, used by rustls)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3-pip \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip3 install --no-cache-dir --break-system-packages \
+      ziglang==0.17.0 cargo-zigbuild==0.23.4
 
-# Create blank project
-RUN USER=root cargo new medium-rust-dockerize
+# Map the Docker platform to the matching Rust (static musl) target
+ARG TARGETPLATFORM
+RUN case "$TARGETPLATFORM" in \
+      linux/amd64)  echo x86_64-unknown-linux-musl ;; \
+      linux/arm64)  echo aarch64-unknown-linux-musl ;; \
+      linux/arm/v7) echo armv7-unknown-linux-musleabihf ;; \
+      linux/arm/v6) echo arm-unknown-linux-musleabihf ;; \
+      *) echo "Unsupported platform: $TARGETPLATFORM" >&2; exit 1 ;; \
+    esac > /rust-target \
+ && rustup target add "$(cat /rust-target)"
 
-# Set the working directory
-WORKDIR /usr/src/medium-rust-dockerize
+WORKDIR /usr/src/vbus2influx
 
-# We want dependencies cached, so copy those first.
-COPY Cargo.toml Cargo.lock /usr/src/medium-rust-dockerize/
+# Build the dependencies first, so they stay cached unless Cargo.toml or
+# Cargo.lock change.
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src \
+ && echo 'fn main() {}' > src/main.rs \
+ && cargo zigbuild --locked --release --target "$(cat /rust-target)" \
+ && rm -rf src
 
-## Install target platform (Cross-Compilation) --> Needed for Alpine
-RUN apt update && apt upgrade -y
-RUN apt install -y g++-aarch64-linux-gnu libc6-dev-arm64-cross
-
-RUN rustup target add aarch64-unknown-linux-musl
-RUN rustup toolchain install stable-aarch64-unknown-linux-musl --force-non-host
-
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc \
-    CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc \
-    CXX_aarch64_unknown_linux_musl=aarch64-linux-gnu-g++
-
-# This is a dummy build to get the dependencies cached.
-RUN cargo update
-RUN cargo build --target aarch64-unknown-linux-musl --release
-
-# Now copy in the rest of the sources
-COPY src /usr/src/medium-rust-dockerize/src/
-
-## Touch main.rs to prevent cached release build
-RUN touch /usr/src/medium-rust-dockerize/src/main.rs
-
-# This is the actual application build.
-RUN cargo build --target aarch64-unknown-linux-musl --release
+# Now copy in the real sources and build the application
+COPY src ./src
+RUN touch src/main.rs \
+ && cargo zigbuild --locked --release --target "$(cat /rust-target)" \
+ && cp "target/$(cat /rust-target)/release/vbus2influx" /vbus2influx
 
 ################
 ##### Runtime
-FROM alpine:latest AS runtime 
+FROM alpine:latest AS runtime
 
 # Copy application binary from builder image
-COPY --from=builder /usr/src/medium-rust-dockerize/target/aarch64-unknown-linux-musl/release/vbus2influx /usr/local/bin/
+COPY --from=builder /vbus2influx /usr/local/bin/vbus2influx
 
-# Run as nonroot
-RUN adduser -S vbus2inf -G dialout
-USER vbus2inf
+# Run as nonroot: uid 100, group dialout (gid 20) for access to the serial port.
+# Numeric ids, so this stage has no RUN step and needs no emulation.
+USER 100:20
 
 # Run the application
 CMD ["vbus2influx"]

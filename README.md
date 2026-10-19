@@ -33,6 +33,21 @@ b) pushes the data to InfluxDB
 # Docker
 
 I included a dockerfile so it is (more) easy to deploy.<br>
+It builds for amd64, arm64, arm/v7 and arm/v6 (e.g. Raspberry Pi with a 64-bit or 32-bit OS). The binary is cross-compiled, so building for another architecture needs no emulation.
+
+Build for the machine you're on:
+
+    docker build -t vbus2influx .
+
+Build for a Raspberry Pi from another machine and load it into the local Docker:
+
+    docker buildx build --platform linux/arm64 -t vbus2influx --load .
+
+Build all architectures as one multi-arch image and push it to a registry:
+
+    docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6 \
+      -t <registry>/vbus2influx:latest --push .
+
 I run it like:
 
 docker run -d --restart unless-stopped \

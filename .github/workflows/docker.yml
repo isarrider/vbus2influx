@@ -1,0 +1,23 @@
+name: Docker
+
+# Builds the image for every supported architecture, to check the Dockerfile.
+# Nothing is pushed to a registry.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
