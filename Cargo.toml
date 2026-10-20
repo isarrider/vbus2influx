@@ -11,8 +11,7 @@ rppal = "0.22.1"
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
 axum = "0.8.9"
-influxdb2 = { version = "0.5.2", default-features = false, features = ["rustls"] }
-futures = "0.3"
+influxdb = { version = "0.8.0", features = ["derive", "chrono"] }
 
 [profile.release]
 strip = true

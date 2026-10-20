@@ -1,6 +1,11 @@
+# InfluxDB 1.x/2.x or VictoriaMetrics, e.g. "http://192.168.1.10:8428".
+# Data is written to <db_url>/write (the InfluxDB 1.x line protocol endpoint).
 db_url = "InfluxDB_url_and_port"
+# Optional: API token (InfluxDB 2.x). Leave out if the database needs none.
 db_token = "secret_token_from_InfluxDB"
-db_org = "org_name"
+# Optional: database/bucket name, sent as "db".
+# InfluxDB 2.x: the bucket needs a DBRP mapping for the 1.x /write endpoint.
+# VictoriaMetrics: leave out, otherwise every series gets a db="..." label.
 db_bucket = "bucket_name"
 db_measurement = "vbus2influx"
 uart_path = "/dev/ttyAMA0"

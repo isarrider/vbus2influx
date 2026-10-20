@@ -13,8 +13,7 @@ use figment::{
     providers::{Format, Toml},
     Figment,
 };
-use futures::stream;
-use influxdb2::{models::DataPoint, Client};
+use influxdb::{Client, InfluxDbWriteable};
 use resol_vbus::{
     chrono::{DateTime, Utc},
     Data, DataSet, Language, LiveDataReader, Specification, SpecificationFile,
@@ -29,8 +28,14 @@ use tokio::sync::Mutex;
 #[derive(Deserialize)]
 struct Config {
     db_url: String,
+    /// Optional: sent as `Authorization: Token ...` when set.
+    #[serde(default)]
     db_token: String,
-    db_org: String,
+    // `db_org` is no longer used (writes go to the 1.x-compatible `/write`
+    // endpoint); it may stay in existing config files and is ignored.
+    /// Sent as the `db` parameter. Optional: VictoriaMetrics turns it into a
+    /// `db` label, so leave it empty there to keep the series unlabelled.
+    #[serde(default)]
     db_bucket: String,
     db_measurement: String,
     uart_path: PathBuf,
@@ -48,11 +53,11 @@ async fn main() -> Result<()> {
     let config = Arc::new(config);
 
     // Create InfluxDB Client
-    let client = Client::new(
-        config.db_url.as_str(),
-        config.db_org.as_str(),
-        config.db_token.as_str(),
-    );
+    // Writes go to `<db_url>/write?db=<db_bucket>`, authorized with the token.
+    let mut client = Client::new(&config.db_url, &config.db_bucket);
+    if !config.db_token.is_empty() {
+        client = client.with_token(&config.db_token);
+    }
 
     let measurements = Arc::new(Mutex::new(Measurements::zeroed()));
 
@@ -87,15 +92,22 @@ async fn main() -> Result<()> {
         let backlog = measurement_buffer.len();
 
         while let Some(m) = measurement_buffer.pop_front() {
+            // Build the write query. This only fails for a timestamp that
+            // doesn't fit in i64 nanoseconds; such a reading could never be
+            // sent, so drop it instead of blocking the buffer.
+            let query = match m.clone().try_into_query(&config.db_measurement) {
+                Ok(query) => query,
+                Err(err) => {
+                    eprintln!(
+                        "Dropping reading with invalid timestamp {}: {err:?}",
+                        m.time
+                    );
+                    continue;
+                }
+            };
+
             // Write measurements to InfluxDB
-            let res: Result<()> = async {
-                let point = m.to_data_point(&config.db_measurement)?;
-                client
-                    .write(&config.db_bucket, stream::iter(vec![point]))
-                    .await?;
-                Ok(())
-            }
-            .await;
+            let res = client.query(query).await;
 
             if let Err(err) = res {
                 measurement_buffer.push_front(m);
@@ -304,7 +316,7 @@ fn read_data<R: Read>(
     Ok(measurements)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, InfluxDbWriteable, Serialize)]
 struct Measurements {
     time: DateTime<Utc>,
     temperature_01: f64,
@@ -362,37 +374,5 @@ impl Measurements {
             PWM_0_10V_A: 0.0,
             PWM_0_10V_B: 0.0,
         }
-    }
-
-    /// Builds an InfluxDB 2.x `DataPoint` from this set of measurements,
-    /// using the configured, runtime measurement name.
-    fn to_data_point(&self, measurement: &str) -> Result<DataPoint> {
-        Ok(DataPoint::builder(measurement)
-            .timestamp(self.time.timestamp_nanos_opt().unwrap_or_default())
-            .field("temperature_01", self.temperature_01)
-            .field("temperature_02", self.temperature_02)
-            .field("temperature_03", self.temperature_03)
-            .field("temperature_04", self.temperature_04)
-            .field("temperature_05", self.temperature_05)
-            .field("temperature_06", self.temperature_06)
-            .field("temperature_07", self.temperature_07)
-            .field("temperature_08", self.temperature_08)
-            .field("temperature_09", self.temperature_09)
-            .field("irradiation_10", self.irradiation_10)
-            .field("temperature_11", self.temperature_11)
-            .field("temperature_12", self.temperature_12)
-            .field("flow_rate_09", self.flow_rate_09)
-            .field("flow_rate_11", self.flow_rate_11)
-            .field("flow_rate_12", self.flow_rate_12)
-            .field("pressure_11", self.pressure_11)
-            .field("pressure_12", self.pressure_12)
-            .field("relay_01", self.relay_01)
-            .field("relay_02", self.relay_02)
-            .field("relay_03", self.relay_03)
-            .field("relay_04", self.relay_04)
-            .field("relay_05", self.relay_05)
-            .field("PWM_0_10V_A", self.PWM_0_10V_A)
-            .field("PWM_0_10V_B", self.PWM_0_10V_B)
-            .build()?)
     }
 }
