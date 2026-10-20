@@ -20,6 +20,7 @@ RUN case "$TARGETPLATFORM" in \
       linux/arm64)  echo aarch64-unknown-linux-musl ;; \
       linux/arm/v7) echo armv7-unknown-linux-musleabihf ;; \
       linux/arm/v6) echo arm-unknown-linux-musleabihf ;; \
+      linux/riscv64) echo riscv64gc-unknown-linux-musl ;; \
       *) echo "Unsupported platform: $TARGETPLATFORM" >&2; exit 1 ;; \
     esac > /rust-target \
  && rustup target add "$(cat /rust-target)"
