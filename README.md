@@ -60,6 +60,23 @@ docker run -d --restart unless-stopped \
 
 (the vbus2influx.toml is to be placed in /etc)
 
+# Breaking changes
+
+## InfluxDB client switched to `influxdb` 0.8 (crates.io)
+
+The InfluxDB client is now the [`influxdb`](https://crates.io/crates/influxdb) crate from crates.io instead of a git fork. Data is still written to `<db_url>/write` with the token, but the config settings behave differently:
+
+| Setting | Before | Now |
+|---|---|---|
+| `db_org` | sent as `org` | **ignored**, can be removed |
+| `db_bucket` | sent as `bucket` | sent as `db`, **optional** |
+| `db_token` | required | **optional**, only sent when set |
+
+**VictoriaMetrics:** set `db_bucket = ""` (or remove the line) to keep everything as it was.<br>
+VictoriaMetrics ignored the old `bucket` parameter, but turns `db` into a label. With `db_bucket` set, every series gets a `db="<db_bucket>"` label, e.g. `vbus2influx_temperature_01{db="mybucket"}`. VictoriaMetrics treats that as a new series, so dashboards would show the old and the new data as separate lines.
+
+**InfluxDB 2.x:** set `db_bucket` to the bucket name and `db_token` to a token with write access. The bucket needs a DBRP mapping for the 1.x `/write` endpoint. InfluxDB 2.10 and newer provides one automatically (virtual DBRP), older versions need `influx v1 dbrp create`.
+
 # misc
 
 Proof that the Pi3 is overkill...
