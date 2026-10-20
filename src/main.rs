@@ -82,6 +82,10 @@ async fn main() -> Result<()> {
         *measurements.lock().await = current_measurements.clone();
         measurement_buffer.push_back(current_measurements);
 
+        // Readings waiting at the start of this round; more than one means
+        // earlier writes failed and this round is catching up.
+        let backlog = measurement_buffer.len();
+
         while let Some(m) = measurement_buffer.pop_front() {
             // Write measurements to InfluxDB
             let res: Result<()> = async {
@@ -94,12 +98,29 @@ async fn main() -> Result<()> {
             .await;
 
             if let Err(err) = res {
-                eprintln!("Error while sending data to InfluxDB: {err}");
                 measurement_buffer.push_front(m);
+                eprintln!(
+                    "Error while sending data to InfluxDB: {err} \
+                     ({} readings buffered, oldest {}s old)",
+                    measurement_buffer.len(),
+                    oldest_age_secs(&measurement_buffer)
+                );
                 break;
             }
         }
+
+        if backlog > 1 && measurement_buffer.is_empty() {
+            println!("InfluxDB reachable again, flushed {backlog} buffered readings");
+        }
     }
+}
+
+/// Age in seconds of the oldest reading still waiting to be sent.
+fn oldest_age_secs(buffer: &VecDeque<Measurements>) -> i64 {
+    buffer
+        .front()
+        .map(|m| Utc::now().signed_duration_since(m.time).num_seconds())
+        .unwrap_or(0)
 }
 
 struct UartWrapper(Uart);
