@@ -11,11 +11,7 @@ rppal = "0.22.1"
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
 axum = "0.8.9"
-
-[dependencies.influxdb]
-features = ["derive"]
-git = "https://github.com/marcelbuesing/influxdb-rust.git"
-branch = "reqwest-client-influx20"
+influxdb = { version = "0.8.0", features = ["derive", "chrono"] }
 
 [profile.release]
 strip = true

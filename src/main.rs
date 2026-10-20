@@ -28,8 +28,14 @@ use tokio::sync::Mutex;
 #[derive(Deserialize)]
 struct Config {
     db_url: String,
+    /// Optional: sent as `Authorization: Token ...` when set.
+    #[serde(default)]
     db_token: String,
-    db_org: String,
+    // `db_org` is no longer used (writes go to the 1.x-compatible `/write`
+    // endpoint); it may stay in existing config files and is ignored.
+    /// Sent as the `db` parameter. Optional: VictoriaMetrics turns it into a
+    /// `db` label, so leave it empty there to keep the series unlabelled.
+    #[serde(default)]
     db_bucket: String,
     db_measurement: String,
     uart_path: PathBuf,
@@ -47,12 +53,11 @@ async fn main() -> Result<()> {
     let config = Arc::new(config);
 
     // Create InfluxDB Client
-    let client = Client::new(
-        &config.db_url,
-        &config.db_org,
-        &config.db_bucket,
-        &config.db_token,
-    );
+    // Writes go to `<db_url>/write?db=<db_bucket>`, authorized with the token.
+    let mut client = Client::new(&config.db_url, &config.db_bucket);
+    if !config.db_token.is_empty() {
+        client = client.with_token(&config.db_token);
+    }
 
     let measurements = Arc::new(Mutex::new(Measurements::zeroed()));
 
@@ -87,10 +92,22 @@ async fn main() -> Result<()> {
         let backlog = measurement_buffer.len();
 
         while let Some(m) = measurement_buffer.pop_front() {
+            // Build the write query. This only fails for a timestamp that
+            // doesn't fit in i64 nanoseconds; such a reading could never be
+            // sent, so drop it instead of blocking the buffer.
+            let query = match m.clone().try_into_query(&config.db_measurement) {
+                Ok(query) => query,
+                Err(err) => {
+                    eprintln!(
+                        "Dropping reading with invalid timestamp {}: {err:?}",
+                        m.time
+                    );
+                    continue;
+                }
+            };
+
             // Write measurements to InfluxDB
-            let res = client
-                .query(&m.clone().into_query(&config.db_measurement))
-                .await;
+            let res = client.query(query).await;
 
             if let Err(err) = res {
                 measurement_buffer.push_front(m);
