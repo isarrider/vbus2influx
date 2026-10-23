@@ -35,6 +35,22 @@ b) pushes the data to InfluxDB
 I included a dockerfile so it is (more) easy to deploy.<br>
 It builds for amd64, arm64, arm/v7, arm/v6 (e.g. Raspberry Pi with a 64-bit or 32-bit OS) and riscv64. The binary is cross-compiled, so building for another architecture needs no emulation.
 
+## Prebuilt image
+
+GitHub Actions builds the image for all of these architectures and publishes it to the GitHub Container Registry, so you don't have to build it yourself. Docker picks the right architecture automatically:
+
+    docker pull ghcr.io/isarrider/vbus2influx:latest
+
+| Tag | Built from |
+|---|---|
+| `latest` | the newest commit on `main` (also rebuilt weekly for base image updates) |
+| `sha-<commit>` | a specific commit on `main` |
+| `1.2.3`, `1.2`, `1` | release tags `v1.2.3` |
+
+To use it, replace `vbus2influx` at the end of the `docker run` command below with `ghcr.io/isarrider/vbus2influx:latest`.
+
+## Building it yourself
+
 Build for the machine you're on:
 
     docker build -t vbus2influx .
